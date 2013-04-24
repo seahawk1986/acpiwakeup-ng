@@ -1,0 +1,13 @@
+[Unit]
+Description=damon to set acpi-wakeup
+Requires=dbus.service dbus.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/acpiwakeupd
+TimeoutSec=5
+KillMode=process
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

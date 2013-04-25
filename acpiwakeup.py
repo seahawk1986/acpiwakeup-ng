@@ -16,13 +16,11 @@ import configparser
 class Main(dbus.service.Object):
     def __init__(self, config='acpiwakeup.conf'):
         self.wakeupTimer = {}
-        #self.wakeupTimer = OrderedDict(sorted(d.items(), key=lambda t: t[1]))
         bus_name = dbus.service.BusName('org.acpi.wakeup', bus=dbus.SystemBus())
         dbus.service.Object.__init__(self, bus_name, '/Wakeup')
         self.dformat = '%Y-%m-%d %H:%M:%S'
         self.init_parser(config)
         self.config = config
-        
         
     def init_parser(self, config):
         self.parser = configparser.SafeConfigParser(delimiters=(":", "="), interpolation=None)
@@ -94,8 +92,16 @@ class Main(dbus.service.Object):
             return False, self.dt2ts(sorted(self.wakeupTimer.values())[0])
         else:
             return True, self.dt2ts(sorted(self.wakeupTimer.values())[0])
-            
-        
+
+    @dbus.service.method('org.acpi.wakeup', in_signature='s', out_signature='bs', id=None)
+    def getWakeupH(self, id=None):
+        if id and id in self.wakeupTimer:
+            return True, self.dt_hr(self.wakeupTimer[id])
+        elif not id:
+            return False, self.dt_hr(sorted(self.wakeupTimer.values())[0])
+        else:
+            return True, self.dt_hr(sorted(self.wakeupTimer.values())[0])
+
     @dbus.service.method('org.acpi.wakeup', in_signature='s', out_signature='bs', id=None)
     def delWakeup(self, id=None):
         if id and id in self.wakeupTimer:
@@ -121,6 +127,7 @@ class Main(dbus.service.Object):
             self.init_parser(self.config)
         else:
             self.init_parser(config)
+        return True
 
     @dbus.service.method('org.acpi.wakeup', in_signature='sx')
     def setWakeup(self, id="system", timestamp=None):

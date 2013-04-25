@@ -14,7 +14,7 @@ import configparser
 
 
 class Main(dbus.service.Object):
-    def __init__(self, config='acpiwakeup.conf'):
+    def __init__(self, config='/etc/acpiwakeup.conf'):
         self.wakeupTimer = {}
         bus_name = dbus.service.BusName('org.acpi.wakeup', bus=dbus.SystemBus())
         dbus.service.Object.__init__(self, bus_name, '/Wakeup')

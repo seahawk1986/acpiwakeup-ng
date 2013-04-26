@@ -3,7 +3,7 @@ Description=damon to set acpi-wakeup time
 Requires=dbus.service dbus.socket
 
 [Service]
-Type=dbus
+Type=simple
 BusName=org.acpi.wakeup
 ExecStart=/usr/bin/acpiwakeupd
 TimeoutSec=5

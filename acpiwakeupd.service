@@ -9,7 +9,7 @@ ExecStart=/usr/bin/acpiwakeupd
 TimeoutSec=5
 KillMode=process
 KillSignal=SIGINT
-ExecStopPre=/usr/bin/acpiwakeupctl setWakeup
+ExecStop=/usr/bin/acpiwakeupctl setWakeup
 
 [Install]
 WantedBy=multi-user.target

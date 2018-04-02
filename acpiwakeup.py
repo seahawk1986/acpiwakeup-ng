@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # Needed packages: python-pytz python-dbus python-dateutil
 
 from gi.repository import GObject

@@ -1,0 +1,12 @@
+#!/bin/bash
+if [ $# -lt 1 ]
+then
+  echo "usage: $0 interface.method [arguments]"
+  exit 1
+fi
+
+DEST=org.yavdr.wakeup
+OBJECT=/org/yavdr/wakeup
+INTERFACE=$1
+shift
+dbus-send --system --type=method_call --dest=$DEST --print-reply $OBJECT $DEST.$INTERFACE "$@"

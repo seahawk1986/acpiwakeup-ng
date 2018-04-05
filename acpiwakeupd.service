@@ -1,15 +1,16 @@
 [Unit]
-Description=damon to set acpi-wakeup time
+Description=damon to set the wakeup time
 Requires=dbus.service dbus.socket
+After=dbus.service dbus.socket
 
 [Service]
-Type=simple
-BusName=org.acpi.wakeup
-ExecStart=/usr/bin/acpiwakeupd
+Type=dbus
+BusName=org.yavdr.wakeup
+ExecStart=/usr/bin/yavdr-wakeup
 TimeoutSec=5
 KillMode=process
 KillSignal=SIGINT
-ExecStop=/usr/bin/acpiwakeupctl setWakeup
+ExecStop=/usr/bin/wakeupctl quit
 
 [Install]
 WantedBy=multi-user.target

@@ -1,52 +1,145 @@
 #!/usr/bin/env python3
-# Needed packages:
-# python-pytz python-gi python-pydbus python-dateutil
 
 import configparser
 import datetime
 import logging
+import pkg_resources
 import sys
 from collections import namedtuple, OrderedDict
 from functools import wraps
+from threading import Lock
+
+import importlib
+import pkgutil
 
 import pydbus
 from dateutil import parser, rrule, tz
 from gi.repository import GLib
 
+import yavdr_wakeup_plugins
+
 WakeupEntry = namedtuple('WakeupEntry', 'date wakeup_type')
 
+IFACE = 'org.yavdr.wakeup'
+S_IFACE = IFACE + '.Setup'
 
-class ACPIWakeup:
-    def __init__(self, path="/sys/class/rtc/rtc0/wakealarm"):
-        self.path = path
+def iter_namespace(ns_pkg):
+    # Specifying the second argument (prefix) to iter_modules makes the
+    # returned name an absolute name instead of a relative one. This allows
+    # import_module to work without having to do additional modification to
+    # the name.
+    return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
 
-    def setWakeupTime(self, wakeuptime):
-        """takes a datetime object and writes it's unix timestamp to RTC"""
-        with open(self.path, "w") as f:
-            f.write("0")
-        with open(self.path, "w") as f:
-            timestamp_str = str(int(self.correct_rtc_offset(wakeuptime.date.timestamp())))
-            print(timestamp_str)
-            f.write(timestamp_str)
+class Settings(object):
+    dbus = f"""
+    <node>
+      <interface name='{S_IFACE}'>
+        <property name="AvailableWakeupMethods" type="as" access="read">
+        </property>
+        <property name="WakeupMethod" type="s" access="readwrite">
+          <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+        </property>
+        <property name="StartAhead" type="i" access="readwrite">
+          <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+        </property>
+        <property name="Path" type="s" access="readwrite">
+          <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+        </property>
+        <property name="DateFormat" type="s" access="readwrite">
+          <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+        </property>
+      </interface>
+    </node>
+    """
+    wakeup_methods = {}
+    wakeup_method = 'acpi'
+    wakeup_methods_lock = Lock()
+    startahead = 5
+    path = "/sys/class/rtc/rtc0/wakealarm"
+    PropertiesChanged = pydbus.generic.signal()
+    config = "/etc/yavdr/wakeup.conf"
+    dformat = '%Y-%m-%d %H:%M:%S %Z'
 
-    def correct_rtc_offset(self, dt):
-        """
-        Check if RTC is set to localtime using the org.freedesktop.timedate1
-        property LocalRTC. In this case, add the utc offset to the datetime
-        object.
-        """
-        timedate1 = bus.get('.timedate1')
-        if timedate1.LocalRTC:
-            tz = tz.gettz(timedate1.Timezone)
-            return dt + tz.utcoffset(ts)
-        else:
-            return dt
+    def __init__(self, cfg=None):
+        if cfg:
+            self.config = cfg
+        self.update_available_wakeup_methods()
+        
+    def init_parser(self):
+        cfg_parser = configparser.SafeConfigParser(delimiters=(":", "="), interpolation=None)
+        cfg_parser.optionxform = str
+        try:
+            with open(self.config, 'r', encoding='utf-8') as f:
+                cfg_parser.readfp(f)
+        except:
+            with open('wakeup.conf', 'r', encoding='utf-8') as f:
+                cfg_parser.readfp(f)
+        self.get_wakeup_dates(cfg_parser)
+        self.get_settings(cfg_parser)
 
+    def update_available_wakeup_methods(self):
+        with self.wakeup_methods_lock:
+            old_wakeup_methods = set(self.wakeup_methods)
+            for finder, name, ispkg in iter_namespace(yavdr_wakeup_plugins):
+                method = name.rsplit('.', maxsplit=1)[-1]
+                old_wakeup_methods.discard(method)
+                self.wakeup_methods[method] = getattr(importlib.import_module(name), method).Wakeup
+            for m in old_wakeup_methods:
+                self.wakeup_methods.pop(m, None)
+        
+    @property
+    def AvailableWakeupMethods(self):
+        self.update_available_wakeup_methods()
+        return list(self.wakeup_methods)
+
+    @property
+    def WakeupMethod(self):
+        return self.wakeup_method
+
+    @WakeupMethod.setter
+    def WakeupMethod(self, method):
+        with self.wakeup_methods_lock:
+            if method in self.wakeup_methods:
+                self.wakeupmethod = method
+                self.PropertiesChanged(S_IFACE, {"WakeupMethod": self.WakeupMethod}, [])
+            else:
+                raise ValueError('unknown wakeup method')
+
+    @property
+    def StartAhead(self):
+        return self.startahead
+
+    @StartAhead.setter
+    def StartAhead(self, value):
+        self.startahead = value
+        self.PropertiesChanged(S_IFACE, {"StartAhead": self.StartAhead}, [])
+
+    @property
+    def Path(self):
+        return self.path
+
+    @Path.setter
+    def Path(self, path):
+        if path and os.path.exists(path):
+            self.path = path
+            self.PropertiesChanged(S_IFACE, {"Path": self.Path}, [])
+        
+    @property
+    def DateFormat(self):
+        return self.dformat
+
+    @DateFormat.setter
+    def DateFormat(self, dformat):
+        try:
+            test = datetime.datetime.now().strftime(dformat)
+            self.dformat = dformat
+        except Exception as e:
+            raise ValueError('invalid DateFormat')
 
 class WakeupManager(object):
-    """
+    dbus = f"""
     <node>
-      <interface name='org.yavdr.wakeup'>
+      <interface name='{IFACE}'>
         <method name='setWakeup'>
           <arg type='s' name='id' direction='in'/>
           <arg type='v' name='timestr' direction='in'/>
@@ -88,50 +181,53 @@ class WakeupManager(object):
     </node>
     """
 
-    wakeup_methods = {
-        'acpi': ACPIWakeup,
-        }
+    wakeup_methods = {}
+    wakeupTimer = {}
+    dformat = '%Y-%m-%d %H:%M:%S %Z'
 
-    def __init__(self, bus=None, config='/etc/yavdr/wakeup.conf'):
-        if bus is not None:
-            self.bus = bus 
-        else:
-            self.bus = pydbus.SystemBus()
+    def __init__(self, settings):
+        for finder, name, ispkg in iter_namespace(yavdr_wakeup_plugins):
+            method = name.rsplit('.', maxsplit=1)[-1]
+            self.wakeup_methods[method] = getattr(importlib.import_module(name), method).Wakeup
+        self.config = settings
+        self.wakeup_methods = settings.wakeup_methods
+        self.bus = pydbus.SystemBus()
 
         # get timezone from system
         timedate1 = self.bus.get('.timedate1')
         self.tz = tz.gettz(timedate1.Timezone)
 
-        self.wakeupTimer = {}
-        self.dformat = '%Y-%m-%d %H:%M:%S %Z'
-        self.config = config
         self.init_parser()
 
     def init_parser(self):
         cfg_parser = configparser.SafeConfigParser(delimiters=(":", "="), interpolation=None)
         cfg_parser.optionxform = str
-        with open(self.config, 'r', encoding='utf-8') as f:
-            cfg_parser.readfp(f)
+        try:
+            with open(self.config, 'r', encoding='utf-8') as f:
+                cfg_parser.readfp(f)
+        except:
+            with open('wakeup.conf', 'r', encoding='utf-8') as f:
+                cfg_parser.readfp(f)
         self.get_wakeup_dates(cfg_parser)
         self.get_settings(cfg_parser)
-        
+
     def get_settings(self, cfg_parser):
         if cfg_parser.has_section("Settings"):
             self.startahead = cfg_parser.getint('Settings', 'StartAhead', fallback=0)
 
             wakeup_method = cfg_parser.get("Settings", "WakeupMethod",
                                                  fallback="acpi")
+            path = cfg_parser.get("Settings", "Path", fallback=None)
+            self.wakeup = self.wakeup_methods.get(wakeup_method)(path)
 
-            self.wakeup = self.wakeup_methods.get(wakeup_method)()
-            
             if cfg_parser.has_option('Settings', 'DateFormat'):
                 try:
                     dformat = cfg_parser.get('Settings', 'DateFormat')
-                    test = datetime.datetime.now().strftime(self.dformat)
+                    test = datetime.datetime.now().strftime(dformat)
                     self.dformat = dformat
                 except Exception as e:
-                    print("invalid DaTeformat In configuration file", e, file=sys.stderr)
-            
+                    print("invalid DateFormat in configuration file", e, file=sys.stderr)
+
     def get_wakeup_dates(self, cfg_parser):
         if cfg_parser.has_section("Wakeup"):
             for wakeuptimer, rrulestring in cfg_parser.items('Wakeup'):
@@ -191,8 +287,8 @@ class WakeupManager(object):
             )
         except StopIteration:
             return False, "no wakeup time set"
-            
-        self.wakeup.setWakeupTime(wakeuptime)
+
+        self.wakeup.setWakeupTime(wakeuptime.date)
         return True, "set wakeup time to %s" % self.dt_hr(wakeuptime.date)
 
     def getWakeup(self, id):
@@ -210,7 +306,7 @@ class WakeupManager(object):
             return self.dt2ts(sorted(self.wakeupTimer.values())[0].date)
         except IndexError:
             return 0
-        
+
     def getWakeupH(self, id):
         self.init_parser()
         if id and id in self.wakeupTimer:
@@ -260,8 +356,10 @@ class WakeupManager(object):
 
 if __name__ == '__main__':
     bus = pydbus.SystemBus()
-    wakeup_manager = WakeupManager(bus=bus)
-    bus.publish("org.yavdr.wakeup", wakeup_manager)
+    settings = Settings()
+    wakeup_manager = WakeupManager(settings=settings)
+    bus.publish(IFACE, wakeup_manager,
+                ('/org/yavdr/wakeup/Setup', settings))
     loop = GLib.MainLoop()
     try:
         loop.run()

@@ -1,19 +1,25 @@
-yavdr-wakeup
-============
+wakeupd
+========
 
-**yavdr-wakeup** provides a unified interface to set wakeup times with user permissions.
+**wakeupd** provides a unified interface to set wakeup times with user permissions.
 It can be used as a replacement for vdr-addon-acpiwakeup.
 
 How it works
 -------------
-**yavdr-wakeup** runs as a DBus-activated service with elevated permissions and provides a DBus API to set, view and remove wakeup dates. Multiple applications can set their preferred wakeup date (e.g. VDR, KODI).
-You can also define recurring wakeup events (e.g. for nightly epg updates) in the configuration file using RRULE syntax.
-The nearest future wakeupevent will be set using the method configured in the configuration file. yavdr-wakeup defaults to acpi to set the wakeup time but supports additional wakeup methods.
+**wakeupd** runs as a DBus-activated service with elevated permissions and provides a DBus API to add, list and remove wakeup dates.
+Multiple applications can set their preferred wakeup date (e.g. VDR, KODI).
+You can also define recurring wakeup events (e.g. for nightly epg updates) in the configuration file using a RRULE syntax.
+The nearest wakeup event will be set using the method configured in the configuration file. yavdr-wakeup defaults to `acpi` to set the wakeup time on `rtc0` and supports alternative wakeup methods (either written as python plugins or by calling an external script with the unix timestamp for the next wakeup event as an argument).
+
+Configuration
+--------------
+**wakeupd** reads it's configuration from the file `/etc/yavdr/wakeup.conf`.
+
 
 wakeupctl
----------------
+----------
 
-This tool allows you to use yavdr-wakeup's DBusAPI.
+This cli-tool allows easy access to yavdr-wakeup's DBusAPI.
 
 Examples:
 ```

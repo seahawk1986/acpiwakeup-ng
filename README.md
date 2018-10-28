@@ -68,34 +68,46 @@ Next wakeup: 5 Minute(s) before 2018-04-06 01:00:00 CEST
 ```
 
 # remove wakeup event by name
+
+```
 $ wakeupctl remove "VDR"
   "deleted VDR"
+```
 
 # get wakeup event by name
-]$ ./wakeupctl getWakeup string:EPGUpdate
+```
+$ ./wakeupctl getWakeup string:EPGUpdate
 method return sender=:1.292 -> dest=:1.294 reply_serial=2
    boolean true
    int64 1366932628
+```
 
 # get human readable time string for wakeup event
+```
 $ ./wakeupctl getWakeupH string:EPGUpdate
 method return sender=:1.292 -> dest=:1.293 reply_serial=2
    boolean true
    string "2013-04-26 01:30:28"
+```
 
 # get human readable time string for next wakeup event
+```
 $ ./wakeupctl getWakeupH string:
 method return sender=:1.292 -> dest=:1.297 reply_serial=2
    boolean true
    string "2013-04-25 20:00:00"
+```
 
 # write next wakeup event to RTC
+```
 $ ./wakeupctl setWakeup string: string:
 method return sender=:1.292 -> dest=:1.296 reply_serial=2
    boolean true
    string "set wakeup time to 2013-04-25 19:55:00"
+```
 
 # create a wakeup event in 6 minutes
+```
 $ ./wakeupctl setWakeup string:TestWakeup int64:"$(($(date +%s) + 600))"
 method return sender=:1.292 -> dest=:1.305 reply_serial=2
    boolean true

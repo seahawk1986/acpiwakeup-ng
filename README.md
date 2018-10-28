@@ -39,8 +39,6 @@ Method = acpi
 Path = /sys/class/rtc/rtc0/wakealarm
 ```
 
-[Wakeup]
-~~~~~~~~~
 The `[Wakeup]` section contains predefined wakeup events. You can use either Date strings (http://labix.org/python-dateutil#head-1443e0f14ad5dff07efd465e080d1110920673d8-2
 ) or RRULE strings (https://dateutil.readthedocs.io/en/stable/rrule.html#rrulestr-examples) to set up events.
 

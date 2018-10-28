@@ -20,8 +20,6 @@ Configuration
 --------------
 **wakeupd** reads it's configuration from the file `/etc/yavdr/wakeup.conf`.
 
-[Settings]
-~~~~~~~~~~
 The `[Settings]` section contains the following Options:
 
  - `StartAhead`  

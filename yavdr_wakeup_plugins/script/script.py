@@ -10,4 +10,6 @@ class Wakeup:
             subprocess.run([path, str(int(dt.timestamp()))])
         except Exception as e:
             print(str(e), file=sys.stderr)
+            dt = None
+        return dt
 

@@ -87,54 +87,6 @@ class Settings(object):
             for m in old_wakeup_methods:
                 self.wakeup_methods.pop(m, None)
         
-    @property
-    def AvailableWakeupMethods(self):
-        self.update_available_wakeup_methods()
-        return list(self.wakeup_methods)
-
-    @property
-    def WakeupMethod(self):
-        return self.wakeup_method
-
-    @WakeupMethod.setter
-    def WakeupMethod(self, method):
-        with self.wakeup_methods_lock:
-            if method in self.wakeup_methods:
-                self.wakeupmethod = method
-                self.PropertiesChanged(S_IFACE, {"WakeupMethod": self.WakeupMethod}, [])
-            else:
-                raise ValueError('unknown wakeup method')
-
-    @property
-    def StartAhead(self):
-        return self.startahead
-
-    @StartAhead.setter
-    def StartAhead(self, value):
-        self.startahead = value
-        self.PropertiesChanged(S_IFACE, {"StartAhead": self.StartAhead}, [])
-
-    @property
-    def Path(self):
-        return self.path
-
-    @Path.setter
-    def Path(self, path):
-        if path and os.path.exists(path):
-            self.path = path
-            self.PropertiesChanged(S_IFACE, {"Path": self.Path}, [])
-        
-    @property
-    def DateFormat(self):
-        return self.dformat
-
-    @DateFormat.setter
-    def DateFormat(self, dformat):
-        try:
-            test = datetime.datetime.now().strftime(dformat)
-            self.dformat = dformat
-        except Exception as e:
-            raise ValueError('invalid DateFormat')
 
 class WakeupManager(object):
     dbus = f"""
@@ -213,11 +165,13 @@ class WakeupManager(object):
 
     def get_settings(self, cfg_parser):
         if cfg_parser.has_section("Settings"):
-            self.startahead = cfg_parser.getint('Settings', 'StartAhead', fallback=0)
+            self.startahead = cfg_parser.getint('Settings', 'StartAhead',
+                    fallback=0)
 
             wakeup_method = cfg_parser.get("Settings", "WakeupMethod",
-                                                 fallback="acpi")
-            path = cfg_parser.get("Settings", "Path", fallback=None)
+                    fallback="acpi")
+            path = cfg_parser.get("Settings", "Path",
+                    fallback='/sys/class/rtc/rtc0/wakealarm')
             self.wakeup = self.wakeup_methods.get(wakeup_method)(path)
 
             if cfg_parser.has_option('Settings', 'DateFormat'):
@@ -226,7 +180,8 @@ class WakeupManager(object):
                     test = datetime.datetime.now().strftime(dformat)
                     self.dformat = dformat
                 except Exception as e:
-                    print("invalid DateFormat in configuration file", e, file=sys.stderr)
+                    print("invalid DateFormat in configuration file", e,
+                            file=sys.stderr)
 
     def get_wakeup_dates(self, cfg_parser):
         if cfg_parser.has_section("Wakeup"):
@@ -261,7 +216,7 @@ class WakeupManager(object):
 
     def dt_hr(self, timeobj):
         """datetime object to formatted string"""
-        return timeobj.strftime(self.dformat)
+        return timeobj.astimezone(datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo).strftime(self.dformat)
 
     def setWakeup(self, id="system", timestamp=None):
         if timestamp:
@@ -288,8 +243,11 @@ class WakeupManager(object):
         except StopIteration:
             return False, "no wakeup time set"
 
-        self.wakeup.setWakeupTime(wakeuptime.date)
-        return True, "set wakeup time to %s" % self.dt_hr(wakeuptime.date)
+        real_wakeuptime = self.wakeup.setWakeupTime(wakeuptime.date)
+        if real_wakeuptime:
+            return True, f"set wakeup time to {self.dt_hr(real_wakeuptime)} ({int(real_wakeuptime.timestamp())})"
+        else:
+            return False, "Error: could not set wakeup time"
 
     def getWakeup(self, id):
         try:

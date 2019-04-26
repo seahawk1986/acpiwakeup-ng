@@ -1,3 +1,8 @@
+import datetime
+import sys
+
+from dateutil import tz
+from dateutil.relativedelta import relativedelta
 import pydbus
 
 class Wakeup:
@@ -11,6 +16,7 @@ class Wakeup:
 
     def setWakeupTime(self, wakeuptime):
         """takes a datetime object and writes it's unix timestamp to RTC"""
+        print(f"Setting wakeup time to {wakeuptime} ({int(wakeuptime.timestamp())})", file=sys.stderr)
         try:
             timestamp = int(self.correct_rtc_offset(wakeuptime).timestamp())
             with open(self.path, "r") as rtc:
@@ -21,8 +27,28 @@ class Wakeup:
                 rtc.write("0\n")
                 rtc.flush()
                 rtc.write(f"{timestamp}\n")
+        except OSError:
+            print(f"RTC did not accept timestamp {timestamp}", file=sys.stderr)
+            # Newer kernel versions (>= 4.14) check if the RTC supports waking on a given timestamp.
+            # Good RTCs allow up to one year in the future, some only a month and some only a day.
+            # So we need to retry with a lower value (or give up if this doesn't help)
+            now = datetime.datetime.now(tz.tzutc())
+            if wakeuptime > now + relativedelta(years=+1):
+                print("Wakeup is more than a year in the future")
+                wakeuptime = now + relativedelta(years=+1, seconds=-1)
+            elif wakeuptime > now + relativedelta(months=+1):
+                print("Wakeup is more than a month in the future")
+                wakeuptime = now + relativedelta(months=+1, seconds=-1)
+            elif now + relativedelta(days=+1) < wakeuptime:
+                print("Wakeup is more than a day in the future")
+                wakeuptime = now + relativedelta(days=+1, seconds=-1)
+            else:
+                return None
+            wakeuptime = self.setWakeupTime(wakeuptime)
         except Exception as e:
-            print("Error: Could not set wakeup time", e)
+            print(f"Error: Could not set wakeup time: {e}", file=sys.stderr)
+            wakeuptime = None
+        return wakeuptime
 
     def correct_rtc_offset(self, dt):
         """
